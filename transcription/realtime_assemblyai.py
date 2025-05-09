@@ -12,6 +12,15 @@ import threading
 import signal
 import time
 from queue import Queue
+import os, uuid, datetime as dt
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# one‑time SDK init (put near the top of realtime_assemblyai.py)
+cred_path = os.getenv("FIREBASE_KEY", "./API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-2de2175327.json")
+cred = credentials.Certificate(os.path.expanduser(cred_path))
+firebase_admin.initialize_app(cred)
+db = firestore.client()                       
 
 # Read API key from environment (prefer ASSEMBLYAI_API_KEY, fallback to ASSEMBLYAI_KEY)
 API_KEY = os.getenv("ASSEMBLYAI_API_KEY") or os.getenv("ASSEMBLYAI_KEY")
@@ -48,13 +57,20 @@ FORCE_MONO = FOR_MONO_ENV in ("1", "true", "yes")
 print(f"[DEBUG] FORCE_MONO={FORCE_MONO}")
 
 # Event handlers
+# global variable (top of file, before on_open)
+CURRENT_SESSION_ID: str | None = None
+
 def on_open(session_opened: aai.RealtimeSessionOpened):
-    print("Session ID:", session_opened.session_id)
+    global CURRENT_SESSION_ID
+    CURRENT_SESSION_ID = session_opened.session_id
+    print("Session ID:", CURRENT_SESSION_ID)
+
 
 def on_data(transcript: aai.RealtimeTranscript):
     print(f"[DEBUG] on_data called with: {transcript}", file=sys.stderr)
     if not transcript.text:
         return
+    
     if isinstance(transcript, aai.RealtimeFinalTranscript):
         print(transcript.text, end="\r\n")
     else:
@@ -97,15 +113,39 @@ if CHANNELS >= 2:
                 q1.put(pcm[:, 1].tobytes())
 
     threading.Thread(target=read_audio, daemon=True).start()
+                              # auto‑ID document
 
     def start_channel(idx, queue):
+        session_info = {}   
+        def _on_open(sess: aai.RealtimeSessionOpened):
+            session_info["id"] = sess.session_id
+            print(f"[Channel {idx}] Session ID:", sess.session_id)
+
+        def on_data_Firebase(transcript: aai.RealtimeTranscript):
+                if not isinstance(transcript, aai.RealtimeFinalTranscript):
+                    return
+            # 2️⃣  fall back to the global session ID captured in on_open
+                sid = str(getattr(transcript, "session_id", session_info.get("id", "unknown")))
+
+            # 3️⃣  Firestore accepts plain dicts straight from Pydantic
+                doc = transcript.model_dump()
+                (db.collection("transcripts")
+                    .document(sid)          # parent doc per call
+                    .collection("chunks")          # one sub‑doc per utterance
+                    .add(doc))
+                
+        def _on_error(err):  print(f"[Channel {idx} ERROR]:", err)
+        def _on_close():     print(f"[Channel {idx}] Closed")
+                
+        
+    
         trans = aai.RealtimeTranscriber(
             sample_rate=SAMPLE_RATE,
             encoding=aai.AudioEncoding.pcm_s16le,
-            on_open=lambda session: print(f"[Channel {idx}] Session ID: {session.session_id}"),
-            on_data=lambda transcript: print(f"[Channel {idx}] {transcript.text}"),
-            on_error=lambda err: print(f"[Channel {idx} ERROR]: {err}", file=sys.stderr),
-            on_close=lambda: print(f"[Channel {idx}] Closed"),
+            on_open=_on_open,
+            on_data=on_data_Firebase,
+            on_error=_on_error,
+            on_close=_on_close,
         )
         trans.connect()
 
