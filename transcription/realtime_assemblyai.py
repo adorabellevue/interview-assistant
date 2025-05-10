@@ -5,6 +5,7 @@ Transcribe streaming audio from microphone using AssemblyAI Python SDK.
 
 import os
 import sys
+import requests
 import assemblyai as aai
 import sounddevice as sd
 import numpy as np
@@ -73,6 +74,8 @@ def on_data(transcript: aai.RealtimeTranscript):
     
     if isinstance(transcript, aai.RealtimeFinalTranscript):
         print(transcript.text, end="\r\n")
+        # call send_to_backend - send variables to backend
+        # send_to_backend(transcript.text, questions)
     else:
         print(transcript.text, end="\r")
 
@@ -200,3 +203,13 @@ else:
         transcriber.stream(mic_stream)
     # Close the connection
     transcriber.close()
+
+def send_to_backend(transcript: str, questions: list[str]):
+    try:
+        response = requests.post(
+            "http://localhost:5001/from-python",
+            json={"transcript": transcript, "questions": questions},
+            timeout=10
+        )
+    except Exception as e:
+        print(f"Error sending to backend: {e}")
