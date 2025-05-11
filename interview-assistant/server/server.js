@@ -16,7 +16,9 @@ app.post("/from-python", async (req, res) => {
   console.log("❓ Questions:", questions);
 
   try {
-    const prompt = `Transcript: ${transcript}\n\nQuestions:\n${questions.join("\n")}`;
+    const prompt = `Based on our interview transcript and current list of interview questions, give me 1 additional
+    question to ask the candidate. The question should be relevant to the transcript and the current list of questions. 
+    Transcript: ${transcript}\n\nQuestions:\n${questions.join("\n")}`;
     const reply = await askGemini(prompt);
     res.json({ reply });
   } catch (err) {

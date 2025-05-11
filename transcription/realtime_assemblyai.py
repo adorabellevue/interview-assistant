@@ -21,7 +21,10 @@ from firebase_admin import credentials, firestore
 cred_path = os.getenv("FIREBASE_KEY", "./API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-2de2175327.json")
 cred = credentials.Certificate(os.path.expanduser(cred_path))
 firebase_admin.initialize_app(cred)
-db = firestore.client()                       
+db = firestore.client()
+session_transcript = ""
+questions = ["How Would You Handle a Situation Where a Project You’re Working on Is Behind Schedule?",
+             "How Do You Handle Feedback and Criticism of Your Code?"]                 
 
 # Read API key from environment (prefer ASSEMBLYAI_API_KEY, fallback to ASSEMBLYAI_KEY)
 API_KEY = os.getenv("ASSEMBLYAI_API_KEY") or os.getenv("ASSEMBLYAI_KEY")
@@ -74,8 +77,6 @@ def on_data(transcript: aai.RealtimeTranscript):
     
     if isinstance(transcript, aai.RealtimeFinalTranscript):
         print(transcript.text, end="\r\n")
-        # call send_to_backend - send variables to backend
-        # send_to_backend(transcript.text, questions)
     else:
         print(transcript.text, end="\r")
 
@@ -125,17 +126,19 @@ if CHANNELS >= 2:
             print(f"[Channel {idx}] Session ID:", sess.session_id)
 
         def on_data_Firebase(transcript: aai.RealtimeTranscript):
+                global session_transcript
                 if not isinstance(transcript, aai.RealtimeFinalTranscript):
                     return
             # 2️⃣  fall back to the global session ID captured in on_open
                 sid = str(getattr(transcript, "session_id", session_info.get("id", "unknown")))
 
             # 3️⃣  Firestore accepts plain dicts straight from Pydantic
-                doc = transcript.model_dump()
+                doc = transcript.dict()
                 (db.collection("transcripts")
                     .document(sid)          # parent doc per call
                     .collection("chunks")          # one sub‑doc per utterance
                     .add(doc))
+                session_transcript = session_transcript + " " + transcript.text
                 
         def _on_error(err):  print(f"[Channel {idx} ERROR]:", err)
         def _on_close():     print(f"[Channel {idx}] Closed")
@@ -205,11 +208,21 @@ else:
     transcriber.close()
 
 def send_to_backend(transcript: str, questions: list[str]):
+    global session_transcript
     try:
         response = requests.post(
             "http://localhost:5001/from-python",
             json={"transcript": transcript, "questions": questions},
             timeout=10
         )
+        print("LLM response: " + response.json())
+        questions.append(response.json())
+        session_transcript = ""
     except Exception as e:
         print(f"Error sending to backend: {e}")
+
+# Send transcipt and questions to LLM every 45 seconds
+while True:
+    send_to_backend(session_transcript, questions)
+    print("Transcript sent to backend")
+    time.sleep(10)
