@@ -22,7 +22,7 @@ app.post("/from-python", async (req, res) => {
     const reply = await askGemini(prompt);
     res.json({ reply });
   } catch (err) {
-    console.error("Gemini error:", err);
+    console.error("Gemini API error:", err);
     res.status(500).json({ error: "Gemini API failed." });
   }
 });
