@@ -133,7 +133,7 @@ if CHANNELS >= 2:
                 sid = str(getattr(transcript, "session_id", session_info.get("id", "unknown")))
 
             # 3️⃣  Firestore accepts plain dicts straight from Pydantic
-                doc = transcript.dict()
+                doc = transcript.model_dump()
                 (db.collection("transcripts")
                     .document(sid)          # parent doc per call
                     .collection("chunks")          # one sub‑doc per utterance
@@ -225,4 +225,4 @@ def send_to_backend(transcript: str, questions: list[str]):
 while True:
     send_to_backend(session_transcript, questions)
     print("Transcript sent to backend")
-    time.sleep(10)
+    time.sleep(45)
