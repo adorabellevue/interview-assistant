@@ -1,35 +1,49 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { useState } from 'react';
+import LogIn from './components/auth/Login';
+import SignUp from './components/auth/Signup';
+import Interview from './components/Interview';
+import { AuthProvider } from './context/AuthContext';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './config/firebase';
 
-function App() {
-  const [count, setCount] = useState(0)
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [showLogin, setShowLogin] = useState(true);
+
+  React.useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <AuthProvider>
+      <div className="App">
+        {!user ? (
+          <div className="auth-container">
+            <div className="auth-toggle">
+              <button 
+                onClick={() => setShowLogin(true)} 
+                className={showLogin ? 'active' : ''}
+              >
+                Login
+              </button>
+              <button 
+                onClick={() => setShowLogin(false)}
+                className={!showLogin ? 'active' : ''}
+              >
+                Sign Up
+              </button>
+            </div>
+            {showLogin ? <LogIn /> : <SignUp />}
+          </div>
+        ) : (
+          <Interview />
+        )}
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    </AuthProvider>
+  );
+};
 
-export default App
+export default App;

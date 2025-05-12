@@ -1,3 +1,15 @@
+.App {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.auth-and-interview {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -27,16 +39,54 @@
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.auth-container {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
-.card {
-  padding: 2em;
+.auth-toggle {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
-.read-the-docs {
-  color: #888;
+.auth-toggle button {
+  padding: 8px 16px;
+  border: none;
+  background: #f0f0f0;
+  cursor: pointer;
 }
+
+.auth-toggle button.active {
+  background: #646cff;
+  color: white;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 8px;
+  margin-top: 5px;
+}
+
+.auth-form button {
+  padding: 10px;
+  background: #646cff;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.error {
+  color: red;
+  margin-bottom: 10px;
+}
+
+

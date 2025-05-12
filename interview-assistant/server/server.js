@@ -27,6 +27,25 @@ app.post("/from-python", async (req, res) => {
   }
 });
 
+app.post("/start-recording", (req, res) => {
+  try {
+    // Here you'll need to implement the logic to start your Python script
+    // You might want to use child_process to spawn the Python script
+    res.json({ message: "Recording started" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to start recording" });
+  }
+});
+
+app.post("/stop-recording", (req, res) => {
+  try {
+    // Implement logic to stop the Python script
+    res.json({ message: "Recording stopped" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to stop recording" });
+  }
+});
+
 app.listen(5001, () => {
   console.log("🧠 Gemini backend running at http://localhost:5001");
 });
