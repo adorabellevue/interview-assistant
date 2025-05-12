@@ -64,6 +64,20 @@ print(f"[DEBUG] FORCE_MONO={FORCE_MONO}")
 # global variable (top of file, before on_open)
 CURRENT_SESSION_ID: str | None = None
 
+def send_to_backend(transcript: str, questions: list[str]):
+    global session_transcript
+    try:
+        response = requests.post(
+            "http://localhost:5001/from-python",
+            json={"transcript": transcript, "questions": questions},
+            timeout=10
+        )
+        print("LLM response: ", response.json())
+        questions.append(response.json())
+        session_transcript = ""
+    except Exception as e:
+        print(f"Error sending to backend: {e}")
+
 def on_open(session_opened: aai.RealtimeSessionOpened):
     global CURRENT_SESSION_ID
     CURRENT_SESSION_ID = session_opened.session_id
@@ -129,10 +143,10 @@ if CHANNELS >= 2:
                 global session_transcript
                 if not isinstance(transcript, aai.RealtimeFinalTranscript):
                     return
-            # 2️⃣  fall back to the global session ID captured in on_open
+            # fall back to the global session ID captured in on_open
                 sid = str(getattr(transcript, "session_id", session_info.get("id", "unknown")))
 
-            # 3️⃣  Firestore accepts plain dicts straight from Pydantic
+            # Firestore accepts plain dicts straight from Pydantic
                 doc = transcript.model_dump()
                 (db.collection("transcripts")
                     .document(sid)          # parent doc per call
@@ -166,8 +180,15 @@ if CHANNELS >= 2:
         threading.Thread(target=start_channel, args=(idx, queue), daemon=True).start()
 
     try:
+        seconds = 0
         while True:
             time.sleep(1)
+            seconds += 1
+            if seconds % 10 == 0:
+                if session_transcript != "":
+                    send_to_backend(session_transcript, questions)
+                    print("Transcript sent to backend")
+            
     except KeyboardInterrupt:
         print("Stopping streams...")
         stop_event.set()
@@ -206,23 +227,3 @@ else:
         transcriber.stream(mic_stream)
     # Close the connection
     transcriber.close()
-
-def send_to_backend(transcript: str, questions: list[str]):
-    global session_transcript
-    try:
-        response = requests.post(
-            "http://localhost:5001/from-python",
-            json={"transcript": transcript, "questions": questions},
-            timeout=10
-        )
-        print("LLM response: " + response.json())
-        questions.append(response.json())
-        session_transcript = ""
-    except Exception as e:
-        print(f"Error sending to backend: {e}")
-
-# Send transcipt and questions to LLM every 45 seconds
-while True:
-    send_to_backend(session_transcript, questions)
-    print("Transcript sent to backend")
-    time.sleep(45)
