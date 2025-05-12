@@ -24,7 +24,7 @@ firebase_admin.initialize_app(cred)
 db = firestore.client()
 session_transcript = ""
 questions = ["How Would You Handle a Situation Where a Project You’re Working on Is Behind Schedule?",
-             "How Do You Handle Feedback and Criticism of Your Code?"]                 
+             "How Do You Handle Feedback and Criticism of Your Code?"]
 
 # Read API key from environment (prefer ASSEMBLYAI_API_KEY, fallback to ASSEMBLYAI_KEY)
 API_KEY = os.getenv("ASSEMBLYAI_API_KEY") or os.getenv("ASSEMBLYAI_KEY")
@@ -63,6 +63,22 @@ print(f"[DEBUG] FORCE_MONO={FORCE_MONO}")
 # Event handlers
 # global variable (top of file, before on_open)
 CURRENT_SESSION_ID: str | None = None
+CURRENT_SESSION_ID = os.getenv("SESSION_ID")
+print(f"Initial session ID from env: {os.getenv('SESSION_ID')}")                 
+
+# def send_to_backend(transcript: str, questions: list[str]):
+#     global session_transcript
+#     try:
+#         response = requests.post(
+#             "http://localhost:5001/from-python",
+#             json={"transcript": transcript, "questions": questions},
+#             timeout=10
+#         )
+#         print("LLM response: ", response.json())
+#         questions.append(response.json())
+#         session_transcript = ""
+#     except Exception as e:
+#         print(f"Error sending to backend: {e}")
 
 def send_to_backend(transcript: str, questions: list[str]):
     global session_transcript
@@ -72,16 +88,26 @@ def send_to_backend(transcript: str, questions: list[str]):
             json={"transcript": transcript, "questions": questions},
             timeout=10
         )
-        print("LLM response: ", response.json())
-        questions.append(response.json())
+        llm_response = response.json()
+        
+        doc = {
+            "type": "llm_response",
+            "content": llm_response['reply'],
+            "timestamp": dt.datetime.now()
+        }
+        
+        (db.collection("transcripts")
+           .document(CURRENT_SESSION_ID)
+           .collection("chunks")
+           .add(doc))
+        
         session_transcript = ""
     except Exception as e:
         print(f"Error sending to backend: {e}")
 
 def on_open(session_opened: aai.RealtimeSessionOpened):
     global CURRENT_SESSION_ID
-    CURRENT_SESSION_ID = session_opened.session_id
-    print("Session ID:", CURRENT_SESSION_ID)
+    print(f"Using session ID: {CURRENT_SESSION_ID}")
 
 
 def on_data(transcript: aai.RealtimeTranscript):
@@ -136,28 +162,47 @@ if CHANNELS >= 2:
     def start_channel(idx, queue):
         session_info = {}   
         def _on_open(sess: aai.RealtimeSessionOpened):
-            session_info["id"] = sess.session_id
+            #session_info["id"] = sess.session_id
             print(f"[Channel {idx}] Session ID:", sess.session_id)
 
-        def on_data_Firebase(transcript: aai.RealtimeTranscript):
-                global session_transcript
-                if not isinstance(transcript, aai.RealtimeFinalTranscript):
-                    return
-            # fall back to the global session ID captured in on_open
-                sid = str(getattr(transcript, "session_id", session_info.get("id", "unknown")))
+        # def on_data_Firebase(transcript: aai.RealtimeTranscript):
+        #         global session_transcript
+        #         if not isinstance(transcript, aai.RealtimeFinalTranscript):
+        #             return
+        #     # fall back to the global session ID captured in on_open
+        #         sid = str(getattr(transcript, "session_id", session_info.get("id", "unknown")))
 
-            # Firestore accepts plain dicts straight from Pydantic
-                doc = transcript.model_dump()
-                (db.collection("transcripts")
-                    .document(sid)          # parent doc per call
-                    .collection("chunks")          # one sub‑doc per utterance
-                    .add(doc))
-                session_transcript = session_transcript + " " + transcript.text
+        #     # Firestore accepts plain dicts straight from Pydantic
+        #         doc = transcript.model_dump()
+        #         (db.collection("transcripts")
+        #             .document(sid)          # parent doc per call
+        #             .collection("chunks")          # one sub‑doc per utterance
+        #             .add(doc))
+        #         session_transcript = session_transcript + " " + transcript.text
+        
+        # no model dump, use dict
+        def on_data_Firebase(transcript: aai.RealtimeTranscript):
+            global session_transcript
+            if not isinstance(transcript, aai.RealtimeFinalTranscript):
+                return
+            
+            doc = {
+                "type": "transcript",  
+                "content": transcript.text, 
+                "timestamp": dt.datetime.now(),
+                "punctuated": True
+            }
+
+            (db.collection("transcripts")
+                .document(CURRENT_SESSION_ID)
+                .collection("chunks")
+                .add(doc))
+            
+            session_transcript = session_transcript + " " + transcript.text
                 
         def _on_error(err):  print(f"[Channel {idx} ERROR]:", err)
         def _on_close():     print(f"[Channel {idx}] Closed")
                 
-        
     
         trans = aai.RealtimeTranscriber(
             sample_rate=SAMPLE_RATE,

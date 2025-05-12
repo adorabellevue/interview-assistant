@@ -1,0 +1,17 @@
+# firebase credentials
+transcription/API-keys/*.json
+
+# env files
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+.vscode/
+.idea/
+*.swp
+.DS_Store
