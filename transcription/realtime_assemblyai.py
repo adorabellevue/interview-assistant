@@ -18,7 +18,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # one‑time SDK init (put near the top of realtime_assemblyai.py)
-cred_path = os.getenv("FIREBASE_KEY", "./API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-2de2175327.json")
+cred_path = os.getenv("FIREBASE_KEY", "./API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-434031afec.json")
 cred = credentials.Certificate(os.path.expanduser(cred_path))
 firebase_admin.initialize_app(cred)
 db = firestore.client()
@@ -35,6 +35,17 @@ if not API_KEY:
 aai.settings.api_key = API_KEY
 
 SAMPLE_RATE = 16_000  # 16 kHz sample rate
+
+
+
+def rms_db(int16_block):
+    """fast RMS→dBFS"""
+    if not int16_block.size:
+        return -120
+    rms = np.sqrt(np.mean(int16_block.astype(np.float32)**2))
+    return 20 * np.log10(rms / 32768 + 1e-12)
+
+
 
 # Optionally select a specific audio input device via its index
 DEVICE_INDEX_ENV = os.getenv("AUDIO_DEVICE_INDEX")
@@ -142,6 +153,15 @@ if CHANNELS >= 2:
     stop_event = threading.Event()
 
     def read_audio():
+        DUCK_THRESHOLD_DB  = -45          # remote louder than this? duck local
+        ATTACK_FRAMES      = 1            # 3*100 ms = 300 ms to trigger
+        RELEASE_FRAMES     = 1           # 1.5 s of silence to un‑duck
+        EMA_ALPHA          = 0.5          # smoothing factor (0‑1)
+
+        # ---- state ----
+        ema_remote_db = -120              # start well below noise floor
+        duck_state    = False
+        attack_cnt    = release_cnt = 0
         print("[DEBUG] Starting multi-channel raw input stream")
         with sd.RawInputStream(
             samplerate=SAMPLE_RATE,
@@ -153,8 +173,28 @@ if CHANNELS >= 2:
             while not stop_event.is_set():
                 data, _ = stream.read(BLOCK_SIZE)
                 pcm = np.frombuffer(data, dtype=np.int16).reshape(-1, CHANNELS)
-                q0.put(pcm[:, 0].tobytes())
-                q1.put(pcm[:, 1].tobytes())
+
+                local  = pcm[:, 0]            # Channel 0
+                remote = pcm[:, 1]            # Channel 1
+
+                # --- side‑chain level detection (100 ms) ---
+                level_db      = rms_db(remote)
+                ema_remote_db = EMA_ALPHA * level_db + (1-EMA_ALPHA) * ema_remote_db  ### NEW
+
+                if ema_remote_db > DUCK_THRESHOLD_DB:
+                    attack_cnt += 1; release_cnt = 0
+                else:
+                    release_cnt += 1; attack_cnt = 0
+
+                if attack_cnt  >= ATTACK_FRAMES:  duck_state = True
+                if release_cnt >= RELEASE_FRAMES: duck_state = False
+
+                if duck_state:                   ### NEW
+                    local[:] = 0                  # hard mute; use *= 0.1 for -20 dB duck
+
+                # queue the (possibly ducked) data
+                q0.put(local.tobytes())
+                q1.put(remote.tobytes())
 
     threading.Thread(target=read_audio, daemon=True).start()
                               # auto‑ID document
@@ -188,7 +228,8 @@ if CHANNELS >= 2:
             
             doc = {
                 "type": "transcript",  
-                "content": transcript.text, 
+                "content": transcript.text,
+                "speaker": idx,
                 "timestamp": dt.datetime.now(),
                 "punctuated": True
             }
