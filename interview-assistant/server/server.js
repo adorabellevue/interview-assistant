@@ -49,7 +49,7 @@ app.post("/start-recording", async (req, res) => {
     
     if (!pythonProcess) {
       const scriptPath = path.join(__dirname, '../../transcription/realtime_assemblyai.py');
-      const firebaseKeyPath = path.join(__dirname, '../../transcription/API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-2de2175327.json');
+      const firebaseKeyPath = path.join(__dirname, '../../transcription/API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-e22c760bf0.json');
       
       pythonProcess = spawn('python3', [scriptPath], {
         env: {

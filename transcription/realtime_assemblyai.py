@@ -17,8 +17,8 @@ import os, uuid, datetime as dt
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# one‑time SDK init (put near the top of realtime_assemblyai.py)
-cred_path = os.getenv("FIREBASE_KEY", "./API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-434031afec.json")
+# one‑time SDK init (put near the top of realtime_assemblyai.py) 
+cred_path = os.getenv("FIREBASE_KEY", "./API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-e22c760bf0.json")
 cred = credentials.Certificate(os.path.expanduser(cred_path))
 firebase_admin.initialize_app(cred)
 db = firestore.client()
