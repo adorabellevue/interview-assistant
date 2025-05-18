@@ -1,0 +1,15 @@
+{
+  "dependencies": {
+    "multer": "^1.4.5-lts.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "chai": "^5.2.0",
+    "mocha": "^11.3.0",
+    "sinon": "^20.0.0",
+    "supertest": "^7.1.1"
+  },
+  "scripts": {
+    "test": "mocha interview-assistant/server/test/**/*.test.js"
+  }
+}

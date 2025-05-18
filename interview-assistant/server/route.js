@@ -5,11 +5,16 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-export async function askGemini(prompt) {
-  const model = genAI.getGenerativeModel({ model: 'models/gemini-1.5-pro' });
+async function askGeminiImplementation(promptOrRequest) {
+  // const model = genAI.getGenerativeModel({ model: 'models/gemini-1.5-pro' });
+  // Use gemini-1.5-flash as it's generally good for mixed modality and often faster/cheaper.
+  // You can switch to gemini-1.5-pro if flash is not sufficient.
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
 
   try {
-    const result = await model.generateContent(prompt);
+    // If promptOrRequest is a string, it's a simple text prompt (backward compatible)
+    // Otherwise, it's assumed to be a request object for generateContent (e.g., for multimodal)
+    const result = await model.generateContent(promptOrRequest);
     const response = await result.response;
     const text = response.text();
     return text;
@@ -18,6 +23,10 @@ export async function askGemini(prompt) {
     return '❌ Error contacting Gemini API.';
   }
 }
+
+export const geminiService = {
+  askGemini: askGeminiImplementation
+};
 
 export const recordingRoutes = {
   startRecording: async (req, res) => {
