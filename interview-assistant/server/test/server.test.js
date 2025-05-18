@@ -70,14 +70,14 @@ describe('POST /process-documents', () => {
     expect(expectedCallArgs).to.be.an('object');
     expect(expectedCallArgs.contents).to.be.an('array').with.lengthOf(1);
     expect(expectedCallArgs.contents[0].parts).to.be.an('array').with.lengthOf(2);
-    
-    // Check the text part (job description and main prompt)
-    const textPart = expectedCallArgs.contents[0].parts.find(part => part.text);
-    expect(textPart.text).to.include('Based on the provided resume (PDF) and the job description (text)');
+
+    // Check the text part (main prompt + job description)
+    const textPart = expectedCallArgs.contents[0].parts[0];
+    expect(textPart.text).to.include('Based on the provided resume (which is a PDF document) and the job description');
     expect(textPart.text).to.include(jobDescriptionBuffer.toString());
 
     // Check the inlineData part (PDF)
-    const pdfPart = expectedCallArgs.contents[0].parts.find(part => part.inlineData);
+    const pdfPart = expectedCallArgs.contents[0].parts[1];
     expect(pdfPart.inlineData.mimeType).to.equal('application/pdf');
     expect(pdfPart.inlineData.data).to.equal(resumeBuffer.toString('base64'));
   });

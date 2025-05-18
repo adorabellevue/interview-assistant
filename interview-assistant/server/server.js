@@ -172,7 +172,7 @@ app.post("/process-documents", upload.fields([{ name: 'resume', maxCount: 1 }, {
           parts: [
             {
               text: `
-Based on the provided resume (PDF) and the job description (text), please generate 5-7 insightful initial interview questions.
+Based on the provided resume (which is a PDF document) and the job description (text that follows), please generate 5-7 insightful initial interview questions.
 The questions should help assess the candidate's suitability for the role described.
 Ensure the questions are open-ended and encourage detailed responses.
 Format each question on a new line, starting with "QUESTION: ".
@@ -193,12 +193,13 @@ Generated Questions based on both documents:
             }
           ]
         }
-      ]
+      ],
+      generationConfig: {
+        temperature: 0.7,
+      },
     };
 
-    console.log("📄 Job Description Content (first 100 chars):", jobDescriptionContent.substring(0,100));
-
-    // Call the LLM to generate questions
+    
     const llmResponse = await geminiService.askGemini(llmRequest); 
 
     // Parse the LLM response (assuming questions are separated by newlines and start with "QUESTION: ")
