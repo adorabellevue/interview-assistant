@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import axios from 'axios';
+import './InitialQuestions.css'; // Import new CSS
 
 const Interview = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -13,6 +14,13 @@ const Interview = () => {
   const [error, setError] = useState(null);
   const [apiStatus, setApiStatus] = useState('Ready');
   const [lastResponse, setLastResponse] = useState(null);
+
+  // State for new feature: Initial Question Generation
+  const [resumeFile, setResumeFile] = useState(null);
+  const [jobDescription, setJobDescription] = useState('');
+  const [initialQuestions, setInitialQuestions] = useState([]);
+  const [processingInitialQuestions, setProcessingInitialQuestions] = useState(false);
+  const [initialQuestionsError, setInitialQuestionsError] = useState(null);
 
   // listen
   useEffect(() => {
@@ -64,6 +72,72 @@ const Interview = () => {
     };
   }, [currentSessionId]);
 
+  const handleResumeChange = (event) => {
+    setResumeFile(event.target.files[0]);
+    setInitialQuestionsError(null); // Clear previous errors
+  };
+
+  const handleJobDescriptionChange = (event) => {
+    setJobDescription(event.target.value);
+    setInitialQuestionsError(null); // Clear previous errors
+  };
+
+  const handleSubmitInitialQuestions = async () => {
+    if (!resumeFile || !jobDescription.trim()) {
+      setInitialQuestionsError('Please upload a resume (PDF) and provide a job description.');
+      return;
+    }
+    if (resumeFile.type !== 'application/pdf') {
+      setInitialQuestionsError('Resume must be a PDF file.');
+      return;
+    }
+
+    setProcessingInitialQuestions(true);
+    setInitialQuestionsError(null);
+    setInitialQuestions([]); // Clear previous questions
+
+    const formData = new FormData();
+    formData.append('resume', resumeFile);
+    formData.append('jobDescription', new Blob([jobDescription], { type: 'text/plain' }), 'job_description.txt');
+
+    try {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/process-documents`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      setInitialQuestions(response.data.questions || []);
+      if (!response.data.questions || response.data.questions.length === 0) {
+        setInitialQuestionsError('No questions were generated. The LLM might have returned an empty list or an unexpected response.');
+      }
+    } catch (err) {
+      console.error('Error processing documents:', err);
+      const errorMsg = err.response && err.response.data && err.response.data.error 
+                       ? err.response.data.error 
+                       : err.message;
+      setInitialQuestionsError(`Failed to generate initial questions: ${errorMsg}`);
+      setInitialQuestions([]); // Clear any partial questions
+    }
+    setProcessingInitialQuestions(false);
+  };
+
+  const handleDownloadInitialQuestions = () => {
+    if (initialQuestions.length === 0) {
+      alert('No questions to download.');
+      return;
+    }
+    const fileContent = initialQuestions.join('\n\n');
+    const blob = new Blob([fileContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'initial_interview_questions.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const startInterview = async () => {
     try {
       setApiStatus('Starting recording...');
@@ -103,7 +177,74 @@ const Interview = () => {
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-      <h1>Interview Questions</h1>
+      {/* Initial Question Generation Section */}
+      <div className="initial-questions-container">
+        <h2>Generate Initial Interview Questions</h2>
+        <div className="form-group">
+          <label htmlFor="resumeUpload">Upload Resume (PDF only):</label>
+          <div className="custom-file-input-wrapper">
+            <input 
+              type="file" 
+              id="resumeUpload" 
+              accept=".pdf" 
+              onChange={handleResumeChange} 
+              disabled={processingInitialQuestions}
+              className="visually-hidden-input"
+            />
+            <label htmlFor="resumeUpload" className="custom-file-input-button">
+              Choose File
+            </label>
+            <span className="custom-file-input-name">
+              {resumeFile ? resumeFile.name : 'No file chosen'}
+            </span>
+          </div>
+        </div>
+        <div className="form-group">
+          <label htmlFor="jobDescription">Job Description:</label>
+          <textarea 
+            id="jobDescription" 
+            value={jobDescription} 
+            onChange={handleJobDescriptionChange} 
+            placeholder="Paste the job description here..." 
+            rows="8"
+            disabled={processingInitialQuestions}
+          />
+        </div>
+        <button 
+          onClick={handleSubmitInitialQuestions} 
+          disabled={processingInitialQuestions || !resumeFile || !jobDescription.trim()}
+          className="submit-initial-questions-btn"
+        >
+          {processingInitialQuestions ? 'Generating...' : 'Generate Initial Questions'}
+        </button>
+
+        {initialQuestionsError && (
+          <div className="initial-questions-error">{initialQuestionsError}</div>
+        )}
+
+        {initialQuestions.length > 0 && (
+          <div className="initial-questions-display">
+            <h3>Generated Initial Questions:</h3>
+            {initialQuestions.map((question, index) => (
+              <div key={index} className="initial-question-item">
+                {question}
+              </div>
+            ))}
+            <button 
+              onClick={handleDownloadInitialQuestions} 
+              className="download-questions-btn"
+              style={{ marginTop: '15px' }}
+            >
+              Download Questions
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Existing Interview Section Separator (Optional) */}
+      <hr style={{ margin: '40px 0' }} /> 
+
+      <h1>Real-time Interview Practice</h1>
       
       <div style={{ margin: '20px 0', textAlign: 'center' }}>
         <button 
