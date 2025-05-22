@@ -63,6 +63,13 @@ export ASSEMBLYAI_API_KEY=[redacted] \
        && python realtime_assemblyai.py
 ```
 
+```pwsh
+
+$env:ASSEMBLYAI_API_KEY="[redacted]"
+$env:AUDIO_DEVICE_INDEX="4" // replace with your index
+python realtime_assemblyai.py
+```
+
 ## Usage
 1. Open two terminals.
     - In one terminal, `cd project-c/interview-assistant/client`
