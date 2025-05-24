@@ -84,16 +84,35 @@ app.post("/start-recording", async (req, res) => {
     
     if (!pythonProcess) {
       const scriptPath = path.join(__dirname, '../../transcription/realtime_assemblyai.py');
-      const firebaseKeyPath = path.join(__dirname, '../../transcription/API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-e22c760bf0.json');
       
-      pythonProcess = spawn('python3', [scriptPath], {
-        env: {
-          ...process.env,
-          ASSEMBLYAI_API_KEY: process.env.ASSEMBLYAI_API_KEY,
-          FIREBASE_KEY: firebaseKeyPath,
-          SESSION_ID: sessionId 
-        },
-        cwd: path.join(__dirname, '../../transcription') 
+      let firebaseKeyPathForPython;
+      const hardcodedFallbackPath = path.join(__dirname, '../../transcription/API-keys/interviewer-assistant-e76d2-firebase-adminsdk-fbsvc-e22c760bf0.json');
+
+      if (process.env.FIREBASE_KEY) {
+        firebaseKeyPathForPython = process.env.FIREBASE_KEY;
+        console.log(`[server.js] Using FIREBASE_KEY from .env. Path for Python script: ${firebaseKeyPathForPython}`);
+      } else {
+        firebaseKeyPathForPython = hardcodedFallbackPath;
+        console.log(`[server.js] FIREBASE_KEY not found in .env. Using hardcoded fallback path for Python script: ${firebaseKeyPathForPython}`);
+      }
+
+      const spawnEnv = { 
+        ...process.env,
+        ASSEMBLYAI_API_KEY: process.env.ASSEMBLYAI_API_KEY,
+        SESSION_ID: sessionId
+      };
+      
+      console.log(`[server.js] Spawning Python script. Path: ${scriptPath}. CWD: ${path.join(__dirname, '../../transcription')}.`);
+      console.log("[server.js] Python script environment will include (relevant vars):", 
+        Object.fromEntries(Object.entries(spawnEnv).filter(([key]) => ['ASSEMBLYAI_API_KEY', 'SESSION_ID'].includes(key) || key.startsWith('PYTHON')))
+      );
+      
+      const finalPythonArgs = [scriptPath, sessionId, firebaseKeyPathForPython];
+
+      pythonProcess = spawn('python3', finalPythonArgs, {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'], 
+        env: spawnEnv,
+        cwd: path.join(__dirname, '../../transcription')
       });
 
       pythonProcess.stdout.on('data', (data) => {
