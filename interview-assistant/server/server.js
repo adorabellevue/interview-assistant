@@ -4,9 +4,9 @@ import cors from "cors";
 import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid'; // Add this import
-import * as url from 'url'; // Import the full url module
-import { geminiService, recordingRoutes } from "./route.js"; // Updated import
+import { v4 as uuidv4 } from 'uuid';
+import * as url from 'url';
+import { geminiService, recordingRoutes } from "./route.js";
 import multer from 'multer'; // Added for file uploads
 import fs from 'fs'; // Added for file system operations
 import { promisify } from 'util'; // To use fs.readFile with async/await
@@ -43,7 +43,6 @@ const fileFilter = (req, file, cb) => {
       cb(new Error('Resume must be a PDF file.'), false);
     }
   } else {
-  
     cb(null, true); // Allow other files through by default
   }
 };
@@ -109,7 +108,7 @@ app.post("/start-recording", async (req, res) => {
       
       const finalPythonArgs = [scriptPath, sessionId, firebaseKeyPathForPython];
 
-      pythonProcess = spawn('python3', finalPythonArgs, {
+      pythonProcess = spawn('python3', finalPythonArgs, { // Adjust if using custom Python env
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'], 
         env: spawnEnv,
         cwd: path.join(__dirname, '../../transcription')
@@ -152,14 +151,44 @@ app.post("/start-recording", async (req, res) => {
 
 app.post("/stop-recording", async (req, res) => {
   try {
-    const result = await recordingRoutes.stopRecording(req, res);
+    const sessionId = req.body.session_id;
+    if (!sessionId) {
+      return res.status(400).json({ error: "Missing session_id in request." });
+    }
     
+    // Stop transcription process
     if (pythonProcess) {
       pythonProcess.kill();
       pythonProcess = null;
     }
 
-    res.json(result);
+    // Run fetch_transcript.py with sessionID
+    const scriptPath = path.join(__dirname, '../../transcription/fetch_transcript.py');
+    const python = spawn('python', [scriptPath, sessionId], {
+      cwd: path.join(__dirname, '../../transcription'),
+    });
+    
+    let fullTranscript = '';
+    python.stdout.on('data', (data) => {
+      fullTranscript += data.toString();
+    });
+
+    python.stderr.on('data', (data) => {
+      console.error(`[fetch_transcript.py] error: ${data}`);
+    });
+
+    python.on('close', (code) => {
+      if (code !== 0) {
+        return res.status(500).json({ error: `fetch_transcript.py exited with code ${code}` });
+      }
+      console.log(`[server.js] Full transcript for session ${sessionId}:\n${fullTranscript}`);
+      res.json({
+        success: true,
+        session_id: sessionId,
+        transcript: fullTranscript.trim(),
+        message: 'Recording stopped and transcript retrieved'
+      });
+    });
   } catch (error) {
     console.error('Stop recording error:', error);
     res.status(500).json({ error: "Failed to stop recording" });
@@ -255,6 +284,32 @@ Generated Questions based on both documents:
       fs.unlinkSync(req.files.jobDescription[0].path);
     }
     res.status(500).json({ error: "Failed to process documents." });
+  }
+});
+
+// Post-interview summary
+app.post("/summarize-transcript", async (req, res) => {
+  try {
+    const { transcript } = req.body;
+    if (!transcript || transcript.trim().length < 10) {
+      return res.status(400).json({ error: "Transcript is too short to summarize." });
+    }
+
+    const prompt = `
+    Summarize the following job interview transcript. Focus on the candidate's strengths, areas for improvement, and any themes or topics discussed.
+    Avoid repeating the entire transcript.
+
+    Transcript:
+    ---
+    ${transcript}
+    ---
+    `;
+
+    const summary = await geminiService.askGemini(prompt);
+    res.json({ summary });
+  } catch (error) {
+    console.error("Summarization error:", error);
+    res.status(500).json({ error: "Failed to generate summary." });
   }
 });
 
