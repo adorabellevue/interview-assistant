@@ -14,13 +14,12 @@ const Interview = () => {
   const [error, setError] = useState(null);
   const [apiStatus, setApiStatus] = useState('Ready');
   const [lastResponse, setLastResponse] = useState(null);
-
-  // State for new feature: Initial Question Generation
   const [resumeFile, setResumeFile] = useState(null);
   const [jobDescription, setJobDescription] = useState('');
   const [initialQuestions, setInitialQuestions] = useState([]);
   const [processingInitialQuestions, setProcessingInitialQuestions] = useState(false);
   const [initialQuestionsError, setInitialQuestionsError] = useState(null);
+  const [summary, setSummary] = useState(null);
 
   // listen
   useEffect(() => {
@@ -138,8 +137,15 @@ const Interview = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Start interview
   const startInterview = async () => {
     try {
+      setQuestions([
+        "How Would You Handle a Situation Where a Project You're Working on Is Behind Schedule?",
+        "How Do You Handle Feedback and Criticism of Your Code?"
+      ]);
+      setLastResponse(null);
+      setSummary(null);
       setApiStatus('Starting recording...');
       setIsRecording(true);
   
@@ -162,12 +168,27 @@ const Interview = () => {
     }
   };
 
+  // Stop interview
   const stopInterview = async () => {
     try {
       setApiStatus('Stopping recording...');
-      await axios.post(`${import.meta.env.VITE_API_URL}/stop-recording`);
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/stop-recording`, {
+        session_id: currentSessionId
+      });
       setIsRecording(false);
       setApiStatus('Recording stopped');
+
+      const transcript = response.data.transcript;
+      if (transcript) {
+        console.log("Full transcript:", transcript);
+        setLastResponse(transcript);
+
+        // Send to Gemini for summary
+        const summaryResponse = await axios.post(`${import.meta.env.VITE_API_URL}/summarize-transcript`, {
+          transcript: transcript
+        });
+        setSummary(summaryResponse.data.summary);
+      }
     } catch (error) {
       console.error('Stop recording error:', error);
       setError(`Failed to stop recording: ${error.message}`);
@@ -263,7 +284,6 @@ const Interview = () => {
         </button>
       </div>
 
-
       <div style={{
         margin: '10px 0',
         padding: '10px',
@@ -271,11 +291,6 @@ const Interview = () => {
         borderRadius: '4px'
       }}>
         <strong>Status:</strong> {apiStatus}
-        {lastResponse && (
-          <div style={{ marginTop: '5px', fontSize: '14px' }}>
-            <strong>Last Transcript:</strong> {lastResponse}
-          </div>
-        )}
       </div>
 
       {/* Error display */}
@@ -306,7 +321,7 @@ const Interview = () => {
               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}
           >
-            <div style={{ fontSize: '16px' }}>{question}</div>
+            <div style={{ fontSize: '16px', color: '#213547' }}>{question}</div>
             {index >= 2 && (
               <div style={{
                 position: 'absolute',
@@ -324,6 +339,26 @@ const Interview = () => {
           </div>
         ))}
       </div>
+
+      {/* End of interview display*/}
+      {lastResponse && (
+        <>
+          <h1 style={{ marginBottom: '10px' }}>End of Interview Summary</h1>
+          <div style={{ display: 'flex', gap: '20px' }}>
+            {/* Full Transcript */}
+            <div style={{ flex: 1, whiteSpace: 'pre-wrap', padding: '20px', borderRadius: '8px' }}>
+              <h3>Full Transcript</h3>
+              <p>{lastResponse}</p>
+            </div>
+
+            {/* Summary */}
+            <div style={{ flex: 1, whiteSpace: 'pre-wrap', padding: '20px', borderRadius: '8px' }}>
+              <h3>Summary</h3>
+              {summary ? <p>{summary}</p> : <p>Generating summary...</p>}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
