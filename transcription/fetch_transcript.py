@@ -26,7 +26,12 @@ def get_full_transcript(session_id):
             speaker = data.get("speaker", "?")
             content = data.get("content", "")
             time_str = format_timestamp(ts)
-            line = f"[{time_str}] Speaker {speaker}: {content}"
+            if speaker == 0:
+                line = f"[{time_str}] Interviewer: {content}"
+            elif speaker == 1:
+                line = f"[{time_str}] Interviewee: {content}"
+            else:
+                line = f"[{time_str}] Unknown Speaker: {content}"
             transcript_lines.append(line)
 
     return "\n".join(transcript_lines)

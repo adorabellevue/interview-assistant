@@ -321,7 +321,7 @@ const Interview = () => {
               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}
           >
-            <div style={{ fontSize: '16px' }}>{question}</div>
+            <div style={{ fontSize: '16px', color: '#213547' }}>{question}</div>
             {index >= 2 && (
               <div style={{
                 position: 'absolute',
