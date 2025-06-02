@@ -1,14 +1,29 @@
 import React from 'react';
 import useInterviewStore from '../store/interviewStore'; // Import the store
+import axios from 'axios'; // Make sure axios is imported
 // import { CheckIcon, XMarkIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/solid'; // Or outline
 
 const QuestionRow = ({ question, index }) => {
   // Removed direct selector for dismissQuestion to use getState() in handler
 
-  const handleDismiss = () => {
-    useInterviewStore.getState().dismissQuestion(question.text); // Ensure question.text is passed
-    // TODO: Later, implement: POST to /api/blacklist with the question
-    // console.log(`Dismissing and blacklisting (TODO): ${question.text}`);
+  const handleDismiss = async () => {
+    const questionToDismiss = question.text;
+    useInterviewStore.getState().dismissQuestion(questionToDismiss);
+    
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+      if (!apiUrl) {
+        console.error("VITE_API_URL is not defined. Cannot blacklist question.");
+        return;
+      }
+      await axios.post(`${apiUrl}/api/blacklist-question`, { 
+        questionText: questionToDismiss 
+      });
+      console.log(`Dismissed and requested blacklist for: ${questionToDismiss}`);
+    } catch (error) {
+      console.error("Error blacklisting question:", error.response ? error.response.data : error.message);
+      // Optionally, inform the user or handle the error in UI if desired
+    }
   };
 
   const handleTogglePin = () => {

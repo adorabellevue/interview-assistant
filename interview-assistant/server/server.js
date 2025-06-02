@@ -13,6 +13,9 @@ import { promisify } from 'util'; // To use fs.readFile with async/await
 
 dotenv.config();
 
+// Initialize in-memory blacklist
+let blacklistedQuestions = [];
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -54,15 +57,22 @@ let pythonProcess = null;
 
 app.post("/from-python", async (req, res) => {
   const { transcript, questions } = req.body;
-  console.log("Transcript:", transcript);
-  console.log("Questions:", questions);
+  // console.log("Transcript:", transcript);
+  // console.log("Questions:", questions);
 
   try {
+    let blacklistInstruction = "";
+    if (blacklistedQuestions.length > 0) {
+      blacklistInstruction = `\n\nIMPORTANT: Avoid generating questions similar to any of the following previously dismissed questions:\n- ${blacklistedQuestions.join("\n- ")}`;
+    }
+
     const prompt = `Based on our interview transcript and current list of interview questions, give me 1 additional
     question to ask the candidate. The question should be relevant to the transcript and the current list of questions. Format your response exactly like this:
 QUESTION: "Your follow-up question here?" You may include a short explanation of why you chose this question on a new line after.
-    Transcript: ${transcript}\n\nQuestions:\n${questions.join("\n")}`;
-    const reply = await geminiService.askGemini(prompt); // Updated call
+    Transcript: ${transcript}\n\nQuestions:\n${questions.join("\n")}${blacklistInstruction}`;
+    
+    // console.log("Prompt to Gemini for follow-up:", prompt); // For debugging
+    const reply = await geminiService.askGemini(prompt);
 
     res.json({
       reply,
@@ -205,14 +215,10 @@ app.post("/process-documents", upload.fields([{ name: 'resume', maxCount: 1 }, {
     const resumeFile = req.files.resume[0];
     const jobDescriptionFile = req.files.jobDescription[0];
 
-    // Read resume PDF as base64
     const resumeBuffer = await readFileAsync(resumeFile.path);
     const resumeBase64 = resumeBuffer.toString('base64');
-
-    // Read job description content as text
     const jobDescriptionContent = await readFileAsync(jobDescriptionFile.path, 'utf8');
 
-    // Construct the multimodal request for the LLM
     const llmRequest = {
       contents: [
         {
@@ -247,24 +253,18 @@ Generated Questions based on both documents:
       },
     };
 
-    
-    const llmResponse = await geminiService.askGemini(llmRequest); 
+    const llmResponseString = await geminiService.askGemini(llmRequest);
 
-    // Parse the LLM response (assuming questions are separated by newlines and start with "QUESTION: ")
-    const generatedQuestions = llmResponse
+    const generatedQuestions = llmResponseString
       .split('\n')
       .filter(line => line.startsWith("QUESTION: "))
       .map(line => line.substring("QUESTION: ".length).trim())
       .filter(question => question.length > 0);
 
-    if (generatedQuestions.length === 0) {
-      // Fallback or error handling if no questions were parsed
-      console.error("LLM did not return questions in the expected format. Response:", llmResponse);
-      // Provide some default questions or indicate an issue
-      generatedQuestions.push("Could you walk me through your resume?", "What interested you most about this job description?");
+    if (generatedQuestions.length === 0 && llmResponseString) { 
+      console.warn("LLM did not return questions in the expected format for /process-documents. Response:", llmResponseString);
     }
 
-    // Clean up uploaded files after processing
     fs.unlinkSync(resumeFile.path);
     fs.unlinkSync(jobDescriptionFile.path);
 
@@ -276,14 +276,35 @@ Generated Questions based on both documents:
 
   } catch (error) {
     console.error("Error processing documents:", error);
-    // Clean up files in case of error too, if they exist
+    // Clean up uploaded files in case of error
     if (req.files && req.files.resume && req.files.resume[0] && fs.existsSync(req.files.resume[0].path)) {
       fs.unlinkSync(req.files.resume[0].path);
     }
     if (req.files && req.files.jobDescription && req.files.jobDescription[0] && fs.existsSync(req.files.jobDescription[0].path)) {
       fs.unlinkSync(req.files.jobDescription[0].path);
     }
-    res.status(500).json({ error: "Failed to process documents." });
+    res.status(500).json({ error: error.message || "Failed to process documents." });
+  }
+});
+
+// New endpoint for blacklisting questions
+app.post("/api/blacklist-question", (req, res) => {
+  const { questionText } = req.body;
+  if (questionText && typeof questionText === 'string') {
+  const trimmedQuestion = questionText.trim();
+    if (trimmedQuestion && !blacklistedQuestions.includes(trimmedQuestion)) {
+      blacklistedQuestions.push(trimmedQuestion);
+      console.log("Blacklisted question:", trimmedQuestion);
+      console.log("Current blacklist:", blacklistedQuestions);
+      res.status(200).json({ message: "Question blacklisted successfully." });
+    } else if (blacklistedQuestions.includes(trimmedQuestion)) {
+      res.status(200).json({ message: "Question already blacklisted." });
+    } 
+    else {
+      res.status(400).json({ error: "Cannot blacklist an empty question." });
+    }
+  } else {
+    res.status(400).json({ error: "Invalid question text provided." });
   }
 });
 
