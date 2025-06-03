@@ -14,7 +14,6 @@ const uploadsDir = path.join(__dirname, '../uploads');
 
 // !!! IMPORTANT: For testing purposes only. Do not commit API keys to version control.
 // It's better to use a .env file and ensure it's in .gitignore.
-// process.env.GEMINI_API_KEY = "AIzaSyA3gNKx25QFc65MlyKuyLzp64-fZ2YA0Yc"; // Removed, should be loaded from .env by dotenv
 
 describe('POST /process-documents - Integration with Gemini API', () => {
 
